@@ -2,6 +2,9 @@ name: Build mod-enabled RSDKv5U for browser
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - mod-loader-web-build
 
 permissions:
   contents: read
