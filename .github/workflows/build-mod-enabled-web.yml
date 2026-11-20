@@ -49,6 +49,21 @@ jobs:
               raise SystemExit("Could not safely locate the Emscripten output-name setting.")
           path.write_text(source.replace(old, new, 1))
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          mod_api = Path("RSDKv5/RSDK/Core/ModAPI.cpp")
+          source = mod_api.read_text()
+          if "#include <algorithm>" not in source:
+              source = source.replace('#include "RSDK/Core/RetroEngine.hpp"\n', '#include "RSDK/Core/RetroEngine.hpp"\n#include <algorithm>\n', 1)
+              mod_api.write_text(source)
+          header = Path("RSDKv5/RSDK/Core/RetroEngine.hpp")
+          source = header.read_text()
+          old_platform = "#elif defined __linux__\n#define RETRO_PLATFORM   (RETRO_LINUX)"
+          new_platform = "#elif defined __EMSCRIPTEN__\n#define RETRO_PLATFORM   (RETRO_LINUX)\n#define RETRO_DEVICETYPE (RETRO_STANDARD)\n#elif defined __linux__\n#define RETRO_PLATFORM   (RETRO_LINUX)"
+          if old_platform not in source:
+              raise SystemExit("Could not safely locate the platform-detection section.")
+          header.write_text(source.replace(old_platform, new_platform, 1))
+          PY
 
       - name: Build RSDKv5U with the mod loader enabled
         working-directory: engine-source
