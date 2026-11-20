@@ -1,0 +1,73 @@
+name: Build mod-enabled RSDKv5U for browser
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-web-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v4
+
+      - name: Check out the WebAssembly engine source
+        uses: actions/checkout@v4
+        with:
+          repository: ant9012/RSDKv5-Decompilation-wasm
+          ref: c6b97315542ddba799329b4d27477657997a33e1
+          path: engine-source
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+
+      - name: Install the Theora dependency
+        working-directory: engine-source
+        run: |
+          mkdir -p dependencies/all
+          curl -L --fail -o /tmp/libtheora.zip https://downloads.xiph.org/releases/theora/libtheora-1.1.1.zip
+          unzip -q /tmp/libtheora.zip -d /tmp
+          mv /tmp/libtheora-1.1.1 dependencies/all/libtheora
+
+      - name: Name the output to match the existing browser loader
+        working-directory: engine-source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("platforms/Emscripten.cmake")
+          source = path.read_text()
+          old = 'set_target_properties(RetroEngine PROPERTIES\n    SUFFIX ".js"\n)'
+          new = 'set_target_properties(RetroEngine PROPERTIES\n    SUFFIX ".js"\n    OUTPUT_NAME "RSDKv5U"\n)'
+          if old not in source:
+              raise SystemExit("Could not safely locate the Emscripten output-name setting.")
+          path.write_text(source.replace(old, new, 1))
+          PY
+
+      - name: Build RSDKv5U with the mod loader enabled
+        working-directory: engine-source
+        run: |
+          emcmake cmake -S . -B build_v5U \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DRETRO_REVISION=3 \
+            -DRETRO_MOD_LOADER=ON \
+            -DRETRO_MOD_LOADER_VER=2 \
+            -DRETRO_DISABLE_PLUS=ON
+          cmake --build build_v5U --config Release --parallel 2
+
+      - name: Collect browser engine files
+        working-directory: engine-source
+        run: |
+          mkdir -p ../artifacts
+          cp build_v5U/RSDKv5U.js ../artifacts/
+          cp build_v5U/RSDKv5U.wasm ../artifacts/
+
+      - name: Upload browser engine
+        uses: actions/upload-artifact@v4
+        with:
+          name: RSDKv5U-mod-enabled-no-SharedArrayBuffer
+          path: artifacts/
+          if-no-files-found: error
